@@ -1,0 +1,44 @@
+#!/bin/bash
+# param {string} remote_user
+# param {string} remote_host
+
+set -e
+
+service=$1
+remote_addr="$remote_user"@"$remote_host"
+
+# Use this variables to specify remote port etc.
+ssh_args=
+scp_args=
+
+echo "[DEPLOY] Running deploy for $service"
+
+cd "$service" && ./bin/build && cd ..
+
+echo "[DEPLOY] Creating Package $service.tar.gz"
+
+rm -rf "$service".tar.gz
+
+exclude_file=$(pwd)/${service}/packaging_ignore.txt
+x_flag_value=""
+if [ -f "$exclude_file" ]; then
+    x_flag_value="-X ${exclude_file}"
+fi
+tar -czpf "$service".tar.gz "$x_flag_value" -C $(pwd)/$service .
+
+echo "[DEPLOY] Delivering package to server"
+
+ssh $ssh_args "$remote_addr" "rm -rf /tmp/${service}"
+scp $scp_args $service.tar.gz "$remote_addr":/tmp
+
+ssh $ssh_args "$remote_addr" "rm -rf /opt/${service}"
+ssh $ssh_args "$remote_addr" "mkdir /opt/${service}"
+ssh $ssh_args "$remote_addr" "tar -xzf /tmp/${service}.tar.gz -C /opt/${service}"
+
+echo "[DEPLOY] Deploying package"
+# This part is project specific
+# ssh $ssh_args "$remote_addr" "cd /opt/${service} && yarn migration:run"
+# ssh $ssh_args "$remote_addr" "rm -rf /etc/supervisor/conf.d/${service}.conf"
+# ssh $ssh_args "$remote_addr" "ln -s /opt/${service}/env/supervisor/${service}.conf /etc/supervisor/conf.d/${service}.conf"
+# ssh $ssh_args "$remote_addr" "service supervisor restart"
+echo "[DEPLOY] SUCCESS!"
